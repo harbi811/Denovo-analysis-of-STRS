@@ -1,0 +1,84 @@
+---
+title: "Comparing STRetch/Ehdn results with EnsembleTR"
+author: "Ibra Lujumba"
+date: "2023-01-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/home/ace/Desktop/STRetch-EHdn/")
+```
+
+Loading packages
+```{r, echo=FALSE, include=FALSE}
+require(tidyverse)
+```
+
+## Reading in data
+
+```{r}
+stretch_trs <- read.csv("STRetch/TRs_detected_by_STRetch.csv")
+ehdn_trs <- read.csv("EHdn/loci_detected_by_EHdn.csv")
+ensemble_trs <- read.csv("Large_Expansions.csv")
+```
+
+```{r}
+ensemble <- ensemble_trs %>% 
+    dplyr::select(CHROM, GENE, MOTIF) %>% 
+    plyr::rename(c("CHROM" = "chr", "GENE" = "gene", "MOTIF" = "motif")) %>% 
+    arrange(chr)
+   
+
+stretch <- stretch_trs %>% 
+    dplyr::select(chr, gene, repeatunit) %>% 
+    plyr::rename(c("repeatunit" = "motif")) %>% 
+    arrange(chr)
+
+ehdn <- ehdn_trs %>% 
+    dplyr::select(chr, gene, motif) %>% 
+    arrange(chr)
+```
+
+```{r, echo=FALSE, include=FALSE}
+# TRs detected by STRetch, EHdn and EnsembleTR
+STRtech_ehdn_trs <- bind_rows(stretch, ehdn) %>% 
+    distinct()
+
+common_ensemble_STRetch_ehdn <- inner_join(STRtech_ehdn_trs, ensemble) 
+
+write.csv(common_ensemble_STRetch_ehdn, "common_to_ensembleTR_STRetch_ehdn.csv", row.names = FALSE)
+
+# TRs unique to EnsembleTR
+unique_ensemble <- left_join(ensemble, STRtech_ehdn_trs) 
+    
+write.csv(unique_ensemble, "unique_ensemble.csv", row.names = FALSE)
+
+# as.data.frame(table(STRtech_ehdn_trs$gene)) %>% arrange(Freq)
+
+```
+
+```{r, echo=FALSE, include=FALSE}
+# unique to STRetch
+unique_stretch <- left_join(
+    stretch,
+    bind_rows(ehdn, ensemble) %>% 
+        distinct()
+)
+
+write.csv(unique_stretch, "unique_stretch.csv", row.names = F)
+```
+
+```{r}
+# unique to EH denovo
+# unique to STRetch
+unique_ehdn <- left_join(
+    ehdn,
+    bind_rows(stretch, ensemble) %>% 
+        distinct()
+)
+
+write.csv(unique_ehdn, "unique_stretch.csv", row.names = F)
+```
+
+

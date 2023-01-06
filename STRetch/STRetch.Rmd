@@ -159,6 +159,7 @@ baylor_distinct_gr <-  makeGRangesFromDataFrame(baylor_df,
                                             seqnames.field = "chr", start.field = "start",
                                             end.field = "end")
 dim(baylor_df)
+write.csv(baylor_df, "TRs_detected_by_STRetch.csv", row.names = F)
 ```
 
 
