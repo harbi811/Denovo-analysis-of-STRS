@@ -45,12 +45,12 @@ ehdn <- ehdn_trs %>%
 STRtech_ehdn_trs <- bind_rows(stretch, ehdn) %>% 
     distinct()
 
-common_ensemble_STRetch_ehdn <- inner_join(STRtech_ehdn_trs, ensemble) 
+common_ensemble_STRetch_ehdn <- intersect(STRtech_ehdn_trs, ensemble) 
 
 write.csv(common_ensemble_STRetch_ehdn, "common_to_ensembleTR_STRetch_ehdn.csv", row.names = FALSE)
 
 # TRs unique to EnsembleTR
-unique_ensemble <- left_join(ensemble, STRtech_ehdn_trs) 
+unique_ensemble <- setdiff(ensemble, STRtech_ehdn_trs) 
     
 write.csv(unique_ensemble, "unique_ensemble.csv", row.names = FALSE)
 
@@ -60,11 +60,10 @@ write.csv(unique_ensemble, "unique_ensemble.csv", row.names = FALSE)
 
 ```{r, echo=FALSE, include=FALSE}
 # unique to STRetch
-unique_stretch <- left_join(
-    stretch,
-    bind_rows(ehdn, ensemble) %>% 
+ehdn_ensemble <- bind_rows(ehdn, ensemble) %>% 
         distinct()
-)
+
+unique_stretch <- setdiff(stretch, ehdn_ensemble)
 
 write.csv(unique_stretch, "unique_stretch.csv", row.names = F)
 ```
@@ -72,11 +71,11 @@ write.csv(unique_stretch, "unique_stretch.csv", row.names = F)
 ```{r}
 # unique to EH denovo
 # unique to STRetch
-unique_ehdn <- left_join(
-    ehdn,
-    bind_rows(stretch, ensemble) %>% 
+
+stretch_ensemble <- bind_rows(stretch, ensemble) %>% 
         distinct()
-)
+
+unique_ehdn <- setdiff(ehdn, stretch_ensemble)
 
 write.csv(unique_ehdn, "unique_stretch.csv", row.names = F)
 ```
