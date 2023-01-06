@@ -77,7 +77,7 @@ stretch_ensemble <- bind_rows(stretch, ensemble) %>%
 
 unique_ehdn <- setdiff(ehdn, stretch_ensemble)
 
-write.csv(unique_ehdn, "unique_stretch.csv", row.names = F)
+write.csv(unique_ehdn, "unique_ehdn.csv", row.names = F)
 ```
 
 
