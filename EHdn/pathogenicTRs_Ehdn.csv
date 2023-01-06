@@ -1,0 +1,7 @@
+"chr","start","end","width","motif","gene","region","nearest_gene","dist","cause_motif"
+"chr4",39347940,39348884,945,"AAAAG","RFC1","intronic","RFC1",0,"(AARRG)*"
+"chr18",55585708,55586527,820,"AGC","TCF4(NM_001348218:c.770_621delins0,NM_001348219:c.770_621delins0,NM_001369581:c.770_621delins0,NM_001369580:c.770_621delins0,NM_001348217:c.767_459delins0,NM_001348220:c.767_459delins0,NM_001306207:c.767_459delins0)","UTR5","TCF4",0,"(CAG)*"
+"chr13",70139021,70139768,748,"AGC","ATXN8OS","ncRNA_exonic","ATXN8OS",0,"(CTA)*(CTG)*"
+"chr2",190880729,190881082,354,"AGC","GLS(NM_001256310:c.-264_-3delins0,NM_014905:c.-264_-3delins0)","UTR5","GLS",0,"(GCA)*"
+"chr3",129172285,129172846,562,"AGGC","CNBP","intronic","CNBP",0,"(CAGG)*(CAGA)*(CA)*"
+"chr4",39348003,39348579,577,"AAAGG","RFC1","intronic","RFC1",0,"(AARRG)*"

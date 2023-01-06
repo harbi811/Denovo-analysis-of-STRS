@@ -3,6 +3,11 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# analysis data input files
+EHdn/str_profiles/*.tsv
+EHdn/str_profiles/*.json
+STRetch/str_profiles/*.tsv
+
 # User-specific files
 *.rsuser
 *.suo

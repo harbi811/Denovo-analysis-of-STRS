@@ -1,0 +1,337 @@
+---
+title: "Downstream analysis of STRetch results"
+author: "Ibra Lujumba"
+date: "2022-11-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/home/ace/Desktop/STRetch-EHdn/STRetch/")
+
+```
+
+
+```{r packages, echo=FALSE, include=FALSE}
+require(tidyverse)
+library(easyGgplot2)
+library(ggplot2)
+library(GenomicRanges)
+# library(Homo.sapiens) based on hg19
+library(Repitools)
+library(OrganismDbi)
+library(rtracklayer)
+```
+
+```{r}
+concat_strs <- function(dir_path){
+    #dir_path contains strs
+    
+    file_list <- list.files(dir_path)
+    strs <- data.frame()
+    
+    for(sample in file_list){
+        temp <- read.csv(paste0(dir_path, sample), sep = "\t")
+        strs <- rbind(strs, temp)
+    }
+    strs
+}
+
+baylor <- concat_strs("str_profiles/")
+
+dim(baylor)
+```
+
+```{r}
+# trying to determine the cutoff value for outliers
+# pdf("Z score bins for loci", width = 5, height = 5)
+# par(mar = c(5,5,0.05,0.05))
+
+p <- baylor%>%
+  mutate(bin=cut_width(outlier, width=2, boundary=0)) %>% 
+  group_by(bin) %>% 
+  count() %>% 
+  ggplot(aes(x=bin, y = n, label = n)) +
+  xlab("outlier Z scores") +
+  ylab("number of loci") +
+  geom_point() + 
+  ylim(0, 3e5) + 
+  coord_flip() + 
+  geom_text(check_overlap = TRUE, hjust = -0.3, nudge_x = 0.2)
+p
+
+# dev.off()
+```
+
+```{r, echo=FALSE}
+# filter (significance set at p < 0.05 and locus_coverage >= 3)
+# removing centromeric and telomeric repeats, 
+# remove alternate contigs
+
+# negation of %in%
+`%!in%` = Negate(`%in%`)
+
+baylor_filt <- baylor %>% 
+              filter(p_adj < 0.05 & locuscoverage >= 3) %>% 
+              arrange(desc(outlier)) %>% 
+              filter(outlier >= 8) %>% 
+              filter(repeatunit %!in% c("AATGG","AACCCT")) %>% 
+              filter(chrom %in% c(paste0("chr",1:22), "chrX", "chrY"))
+
+rm(list = c('baylor')) # clear
+
+dim(baylor_filt)
+```
+
+## Annotation
+
+```{r df_to_GRanges}
+# making GRanges from multi-sample STRs
+baylor_granges <- makeGRangesFromDataFrame(baylor_filt,
+                                            keep.extra.columns = TRUE,
+                                            seqnames.field = "chrom", start.field = "start",
+                                            end.field = "end")
+
+```
+
+Making TxDb object
+
+```{r, echo = FALSE, include=FALSE}
+genesdb <- makeOrganismDbFromUCSC(genome="hg38",tablename="knownGene",
+                            transcript_ids=NULL,circ_seqs=NULL,
+                            url="http://genome.ucsc.edu/cgi-bin/", goldenPath.url=getOption("UCSC.goldenPath.url"),miRBaseBuild=NA)
+```
+
+
+```{r }
+# getting reference GRanges
+geneRanges <- function(db, column="ENTREZID"){
+    g <- genes(db, columns=column)
+    col <- mcols(g)[[column]]
+    genes <- granges(g)[rep(seq_along(g), elementNROWS(col))]
+    mcols(genes)[[column]] <- as.character(unlist(col))
+    genes
+}
+# gene ranges for each gene symbol
+gns = geneRanges(genesdb, column="SYMBOL")
+
+```
+
+```{r annotation}
+
+annotate_granges <- function(query, subject){
+  
+  # find overlaps, type of overlap is any(start or end or within or equal)
+  # overlaps <- findOverlaps(query, subject)
+  overlaps <- distanceToNearest(query, subject)
+  
+  # distance to nearest gene
+  # create new metadata columns
+  mcols(query)$gene <- NA
+  mcols(query)$dist <- NA
+  
+  # annotate using Hits object
+   mcols(query)$gene[queryHits(overlaps)] <- mcols(subject)$SYMBOL[subjectHits(overlaps)]
+   mcols(query)$dist[queryHits(overlaps)] <- mcols(overlaps)$distance
+   
+   query
+
+}
+
+
+baylor_ann <- annotate_granges(baylor_granges, gns)
+
+```
+
+```{r}
+# convert granges to dataframe and rank z scores (sort by z score column) 
+# filter for samples with z score above threshold
+# select columns and remove duplicates
+# carry along dist column to help during manual validation
+
+# number of detected TRs, collapse repeated loci
+baylor_df <- annoGR2DF(baylor_ann) %>% 
+              arrange(desc(outlier)) %>% 
+              dplyr::select(c(chr, start, end, repeatunit, gene, dist)) %>% distinct()
+
+baylor_distinct_gr <-  makeGRangesFromDataFrame(baylor_df,
+                                            keep.extra.columns = TRUE,
+                                            seqnames.field = "chr", start.field = "start",
+                                            end.field = "end")
+dim(baylor_df)
+```
+
+
+
+```{r}
+# frequency of repeats, size of repeats
+
+baylor_df_notdistinct <- annoGR2DF(baylor_ann) %>% 
+              arrange(desc(outlier)) %>% distinct()
+
+# counts of expansions in genes, number of indiviuduals with expansions
+gene_count <- baylor_df_notdistinct %>% 
+              dplyr::select(c(chr,sample,repeatunit,gene)) %>% distinct() %>% 
+              count(repeatunit, gene, sort = TRUE)
+
+write.csv(gene_count, "number_of_individuals_with_repeats.csv", row.names = F)
+
+```
+
+## Find pathogenic STRs
+
+```{r}
+# focus on genic repeats or those around 500bp from the gene
+genic_baylor <- baylor_df %>% filter(dist <= 500)
+dim(genic_baylor)
+
+write.csv(genic_baylor,"repeats_within_genic_regions_detected_by_STRetch.csv", row.names = FALSE)
+```
+
+```{r}
+nongenic_baylor <- baylor_df %>% filter(dist > 500)
+```
+
+
+```{r}
+# compare with ExpansionHunter reference set
+# parsing repeats database json from ExpansionHunter
+temp_file <- rjson::fromJSON(file = "/home/ace/Desktop/ilifu_repeat expansions/ref_repeats/hg38/variant_catalog.json")
+
+repeatsdb_tmp <- sapply(temp_file, function(x) {
+  rbind(as.data.frame(x))
+})
+
+
+EH_repeatsdb <- data.frame()
+for(element in repeatsdb_tmp){
+    EH_repeatsdb <- bind_rows(EH_repeatsdb, element)
+}
+
+# reformat EH_repeatsdb
+
+EH_repeatsdb_filt <- EH_repeatsdb %>% dplyr::select(-c(OfftargetRegions, VariantType,VariantId)) %>% 
+                                      distinct()
+
+EH_repeatsdb_filt$chr <- NA
+EH_repeatsdb_filt$start <- NA
+EH_repeatsdb_filt$end <- NA
+
+for(row in 1:dim(EH_repeatsdb_filt)[1]){
+  
+  EH_repeatsdb_filt$chr[row] <- strsplit(EH_repeatsdb_filt$ReferenceRegion[row], split = ":")[[1]][1]
+  pos_tmp <- strsplit(EH_repeatsdb_filt$ReferenceRegion[row], split = ":")[[1]][2]
+  EH_repeatsdb_filt$start[row] <- strsplit(pos_tmp, split = "-")[[1]][1]
+  EH_repeatsdb_filt$end[row] <- strsplit(pos_tmp, split = "-")[[1]][2]
+  
+}
+
+causative_repeats <- EH_repeatsdb_filt %>% dplyr::select(-ReferenceRegion) %>% 
+                      relocate(c(chr, start, end, LocusId, LocusStructure))
+
+causative_granges <- makeGRangesFromDataFrame(causative_repeats,
+                                            keep.extra.columns = TRUE,
+                                            seqnames.field = "chr", start.field = "start",
+                                            end.field = "end")
+
+causative_ann <- annotate_granges(causative_granges, gns)
+
+```
+
+
+```{r}
+# function to compare genes
+
+compare_with_causative <- function(query, subject){
+  
+  # find overlaps, type of overlap is any(start or end or within or equal)
+  # overlaps <- findOverlaps(query, subject)
+  overlaps <- distanceToNearest(query, subject)
+  
+  # distance to nearest gene
+  # create new metadata columns
+  mcols(query)$motif <- NA
+  mcols(query)$cause_gene <- NA
+  mcols(query)$cause_dist <- NA
+  
+  # annotate using Hits object
+   mcols(query)$motif[queryHits(overlaps)] <- mcols(subject)$LocusStructure[subjectHits(overlaps)]
+   mcols(query)$cause_gene[queryHits(overlaps)] <- mcols(subject)$gene[subjectHits(overlaps)]
+   mcols(query)$cause_dist[queryHits(overlaps)] <- mcols(overlaps)$distance
+   
+   
+   query
+  
+}
+
+# those within 500 bp of causative repeats
+baylor_cause <- compare_with_causative(baylor_distinct_gr, causative_ann)
+baylor_cause_df <- annoGR2DF(baylor_cause) %>% 
+                  filter(cause_dist <= 500) %>% 
+                  dplyr::select(-c(dist, cause_gene, cause_dist))
+write.csv(baylor_cause_df, "pathogenic_TRs_detected_by_STRetch.csv", row.names = FALSE)
+```
+
+Repeat length estimate is very similar to that reported in the ExpansionHunter reference set for pathogenic TRs
+
+## Find potentially novel repeats
+
+```{r}
+# look for previously reported repeats as well as novel repeats using GRanges
+# comparison is whether a repeat has been reported in that region before
+
+
+ucsc_strs <- read.csv("/home/ace/Desktop/ilifu_repeat expansions/sept2022/STRetch_analysis/hg38.simpleRepeat_period1-6.dedup.sorted.bed", sep = "\t", header = F)
+ucsc_strs$bp <- NULL
+
+colnames(ucsc_strs) <- c("chrom","start","end","repeatunit","bp")
+
+ucsc_granges <- makeGRangesFromDataFrame(ucsc_strs,
+                                            keep.extra.columns = TRUE,
+                                            seqnames.field = "chrom", start.field = "start",
+                                            end.field = "end")
+ucsc_ann <- annotate_granges(ucsc_granges, gns)
+```
+
+
+```{r}
+# finding potentially novel repeats - IGNORE
+potentially_novel <- function(query, subject){
+  
+  # find overlaps, type of overlap is any(start or end or within or equal)
+  # overlaps <- findOverlaps(query, subject)
+  overlaps <- distanceToNearest(query, subject)
+  
+  # distance to nearest gene
+  # create new metadata columns
+  mcols(query)$reported_motif <- NA
+  mcols(query)$new_gene <- NA
+  mcols(query)$new_dist <- NA
+  
+  # annotate using Hits object
+   mcols(query)$reported_motif[queryHits(overlaps)] <- mcols(subject)$repeatunit[subjectHits(overlaps)]
+   mcols(query)$new_gene[queryHits(overlaps)] <- mcols(subject)$gene[subjectHits(overlaps)]
+   mcols(query)$new_dist[queryHits(overlaps)] <- mcols(overlaps)$distance
+   
+   
+   query
+  
+}
+
+baylor_new <- potentially_novel(baylor_distinct_gr, ucsc_ann)
+baylor_new_df <- annoGR2DF(baylor_new)
+
+# potentially novel repeats
+potentially_new <- setdiff(mcols(baylor_distinct_gr)$gene, mcols(ucsc_ann)$gene)
+
+baylor_new_trs <- baylor_new_df %>% 
+                  filter(gene %in% potentially_new)
+
+x <- baylor_new_df %>% filter(gene != new_gene)
+```
+
+Detected genes are located with open reading frames of other genes
+Errors at annotation step??
+
+
+
