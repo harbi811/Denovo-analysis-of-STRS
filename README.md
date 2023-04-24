@@ -1,2 +1,1 @@
-# STRetch-EHdn
-STRetch and ExpansionHunter Denovo analysis of Baylor_H3African samples
+# De novo detection of repeat expansions in the human genome using STREtch and ExpansionHunterDenovo
